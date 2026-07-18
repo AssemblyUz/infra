@@ -1,0 +1,82 @@
+name: Deploy service
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        required: true
+        type: string
+      image:
+        required: true
+        type: string
+    secrets:
+      VPS_HOST:
+        required: true
+      VPS_PORT:
+        required: true
+      VPS_USER:
+        required: true
+      VPS_SSH_KEY:
+        required: true
+      GHCR_USERNAME:
+        required: true
+      GHCR_READ_TOKEN:
+        required: true
+      INFRA_READ_TOKEN:
+        required: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.service }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout infra
+        uses: actions/checkout@v6
+        with:
+          repository: AssemblyUz/infra
+          ref: main
+          token: ${{ secrets.INFRA_READ_TOKEN || github.token }}
+
+      - name: Configure SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Sync infra files
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          tar -czf infra.tar.gz docker-compose.prod.yml Caddyfile.template scripts README.md .env.example
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "sudo mkdir -p /opt/assembly/infra && sudo chown -R '$VPS_USER:$VPS_USER' /opt/assembly"
+          scp -P "$VPS_PORT" infra.tar.gz "$VPS_USER@$VPS_HOST:/tmp/assembly-infra.tar.gz"
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "tar -xzf /tmp/assembly-infra.tar.gz -C /opt/assembly/infra && chmod +x /opt/assembly/infra/scripts/*.sh"
+
+      - name: Log in to GHCR on server
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+        run: |
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "if docker info >/dev/null 2>&1; then DOCKER=docker; else DOCKER='sudo docker'; fi; echo '$GHCR_READ_TOKEN' | \$DOCKER login ghcr.io -u '$GHCR_USERNAME' --password-stdin"
+
+      - name: Deploy service
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          SERVICE: ${{ inputs.service }}
+          IMAGE: ${{ inputs.image }}
+        run: |
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "bash /opt/assembly/infra/scripts/deploy-service.sh '$SERVICE' '$IMAGE'"
