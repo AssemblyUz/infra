@@ -64,6 +64,21 @@ jobs:
           scp -P "$VPS_PORT" infra.tar.gz "$VPS_USER@$VPS_HOST:/tmp/assembly-infra.tar.gz"
           ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "tar -xzf /tmp/assembly-infra.tar.gz -C /opt/assembly/infra && chmod +x /opt/assembly/infra/scripts/*.sh"
 
+      - name: Log in to GHCR on server if configured
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+        run: |
+          if [ -z "$GHCR_USERNAME" ] || [ -z "$GHCR_READ_TOKEN" ]; then
+            echo "GHCR credentials are not set; assuming images are public."
+            exit 0
+          fi
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "if docker info >/dev/null 2>&1; then DOCKER=docker; else DOCKER='sudo docker'; fi; echo '$GHCR_READ_TOKEN' | \$DOCKER login ghcr.io -u '$GHCR_USERNAME' --password-stdin"
+
       - name: Deploy frontend
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}

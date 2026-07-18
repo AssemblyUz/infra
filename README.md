@@ -46,3 +46,8 @@ bash scripts/deploy-service.sh frontend "$(cat deploy/frontend/image.txt)"
 - `VPS_PORT`
 - `VPS_USER`
 - `VPS_SSH_KEY`
+
+Optional, but useful while GHCR packages are private or still settling:
+
+- `GHCR_USERNAME`
+- `GHCR_READ_TOKEN`
