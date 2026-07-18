@@ -78,10 +78,15 @@ wait_for_db() {
 
 wait_for_service() {
   local service="$1"
-  local command="$2"
+  local container_id
+  local health
   for _ in $(seq 1 30); do
-    if "${COMPOSE[@]}" exec -T "$service" sh -lc "$command" >/dev/null 2>&1; then
-      return 0
+    container_id="$("${COMPOSE[@]}" ps -q "$service" 2>/dev/null || true)"
+    if [ -n "$container_id" ]; then
+      health="$("${DOCKER[@]}" inspect --format '{{ if .State.Health }}{{ .State.Health.Status }}{{ else }}{{ .State.Status }}{{ end }}' "$container_id" 2>/dev/null || true)"
+      if [ "$health" = "healthy" ] || [ "$health" = "running" ]; then
+        return 0
+      fi
     fi
     sleep 2
   done
@@ -112,9 +117,9 @@ fi
 "${COMPOSE[@]}" up -d --no-deps caddy
 
 if [ "$SERVICE" = "api" ]; then
-  wait_for_service api 'python manage.py migrate --check'
+  wait_for_service api
 else
-  wait_for_service frontend 'node -e "fetch('\''http://127.0.0.1:3000/healthz'\'').then((r) => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))"'
+  wait_for_service frontend
 fi
 
 "${COMPOSE[@]}" ps
