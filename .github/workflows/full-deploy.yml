@@ -4,13 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       backend_image:
-        description: Backend image to deploy
-        required: true
-        default: ghcr.io/assemblyuz/backend:latest
+        description: Backend image to deploy. Defaults to deploy/backend/image.txt.
+        required: false
       frontend_image:
-        description: Frontend image to deploy
-        required: true
-        default: ghcr.io/assemblyuz/frontend:latest
+        description: Frontend image to deploy. Defaults to deploy/frontend/image.txt.
+        required: false
       run_bootstrap:
         description: Install/update Docker, firewall, swap, and server folders first
         required: true
@@ -24,6 +22,27 @@ jobs:
     steps:
       - name: Checkout infra
         uses: actions/checkout@v6
+
+      - name: Resolve images
+        id: images
+        env:
+          BACKEND_INPUT: ${{ inputs.backend_image }}
+          FRONTEND_INPUT: ${{ inputs.frontend_image }}
+        run: |
+          backend_image="${BACKEND_INPUT:-}"
+          frontend_image="${FRONTEND_INPUT:-}"
+          if [ -z "$backend_image" ]; then
+            backend_image="$(tr -d '[:space:]' < deploy/backend/image.txt)"
+          fi
+          if [ -z "$frontend_image" ]; then
+            frontend_image="$(tr -d '[:space:]' < deploy/frontend/image.txt)"
+          fi
+          if [ -z "$backend_image" ] || [ -z "$frontend_image" ]; then
+            echo "Backend or frontend image is empty." >&2
+            exit 1
+          fi
+          echo "backend_image=$backend_image" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=$frontend_image" >> "$GITHUB_OUTPUT"
 
       - name: Configure SSH
         env:
@@ -42,7 +61,7 @@ jobs:
           VPS_PORT: ${{ secrets.VPS_PORT }}
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
-          tar -czf infra.tar.gz docker-compose.prod.yml Caddyfile.template scripts README.md .env.example
+          tar -czf infra.tar.gz docker-compose.prod.yml Caddyfile.template scripts README.md .env.example deploy
           ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "sudo mkdir -p /opt/assembly/infra && sudo chown -R '$VPS_USER:$VPS_USER' /opt/assembly"
           scp -P "$VPS_PORT" infra.tar.gz "$VPS_USER@$VPS_HOST:/tmp/assembly-infra.tar.gz"
           ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "tar -xzf /tmp/assembly-infra.tar.gz -C /opt/assembly/infra && chmod +x /opt/assembly/infra/scripts/*.sh"
@@ -57,23 +76,12 @@ jobs:
           ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
             "APP_DIR=/opt/assembly SSH_USER='$VPS_USER' bash /opt/assembly/infra/scripts/bootstrap-server.sh"
 
-      - name: Log in to GHCR on server
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
-          GHCR_READ_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
-        run: |
-          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
-            "if docker info >/dev/null 2>&1; then DOCKER=docker; else DOCKER='sudo docker'; fi; echo '$GHCR_READ_TOKEN' | \$DOCKER login ghcr.io -u '$GHCR_USERNAME' --password-stdin"
-
       - name: Deploy backend
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
           VPS_USER: ${{ secrets.VPS_USER }}
-          BACKEND_IMAGE: ${{ inputs.backend_image }}
+          BACKEND_IMAGE: ${{ steps.images.outputs.backend_image }}
         run: |
           ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
             "bash /opt/assembly/infra/scripts/deploy-service.sh api '$BACKEND_IMAGE'"
@@ -83,7 +91,7 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
           VPS_USER: ${{ secrets.VPS_USER }}
-          FRONTEND_IMAGE: ${{ inputs.frontend_image }}
+          FRONTEND_IMAGE: ${{ steps.images.outputs.frontend_image }}
         run: |
           ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
             "bash /opt/assembly/infra/scripts/deploy-service.sh frontend '$FRONTEND_IMAGE'"

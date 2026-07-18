@@ -2,6 +2,20 @@
 
 Production deployment files for the Assembly frontend and backend.
 
+## GitOps flow
+
+- `deploy/backend/image.txt` is the desired backend image.
+- `deploy/frontend/image.txt` is the desired frontend image.
+- Backend and frontend repos build immutable GHCR images tagged by commit SHA.
+- After a successful image push, each app repo commits only its own image file
+  in this repo.
+- Infra workflows deploy from those image-file changes:
+  - `Deploy backend` runs when `deploy/backend/image.txt` changes.
+  - `Deploy frontend` runs when `deploy/frontend/image.txt` changes.
+
+Backend and frontend repos need only `INFRA_WRITE_TOKEN` to update this repo.
+The production VPS secrets stay in this infra repo.
+
 ## Server layout
 
 - `/opt/assembly/infra` - this repository copied by GitHub Actions.
@@ -22,6 +36,13 @@ password, and email settings before running a deploy.
 ## Manual deploy from the server
 
 ```bash
-bash scripts/deploy-service.sh api ghcr.io/assemblyuz/backend:latest
-bash scripts/deploy-service.sh frontend ghcr.io/assemblyuz/frontend:latest
+bash scripts/deploy-service.sh api "$(cat deploy/backend/image.txt)"
+bash scripts/deploy-service.sh frontend "$(cat deploy/frontend/image.txt)"
 ```
+
+## Required infra secrets
+
+- `VPS_HOST`
+- `VPS_PORT`
+- `VPS_USER`
+- `VPS_SSH_KEY`
