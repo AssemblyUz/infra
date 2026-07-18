@@ -112,7 +112,7 @@ fi
 "${COMPOSE[@]}" up -d --no-deps caddy
 
 if [ "$SERVICE" = "api" ]; then
-  wait_for_service api 'python -c "import urllib.request; urllib.request.urlopen('\''http://127.0.0.1:8000/healthz/'\'', timeout=3).read()"'
+  wait_for_service api 'python -c "import os; os.environ.setdefault('\''DJANGO_SETTINGS_MODULE'\'', '\''config.settings'\''); import django; django.setup(); from django.db import connection; cursor = connection.cursor(); cursor.execute('\''SELECT 1'\'')"'
 else
   wait_for_service frontend 'node -e "fetch('\''http://127.0.0.1:3000/healthz'\'').then((r) => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))"'
 fi

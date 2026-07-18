@@ -50,7 +50,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz/', timeout=3).read()",
+          "import os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings'); import django; django.setup(); from django.db import connection; cursor = connection.cursor(); cursor.execute('SELECT 1')",
         ]
       interval: 30s
       timeout: 5s
