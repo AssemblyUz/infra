@@ -6,22 +6,21 @@ IMAGE="${2:?usage: deploy-service.sh <api|frontend> <image>}"
 
 APP_DIR="${APP_DIR:-/opt/assembly}"
 INFRA_DIR="${INFRA_DIR:-$APP_DIR/infra}"
-ENV_FILE="${ENV_FILE:-$APP_DIR/.env}"
-COMPOSE_FILE="$INFRA_DIR/docker-compose.prod.yml"
+ENV_FILE="${ENV_FILE:-$INFRA_DIR/.env}"
+LEGACY_ENV_FILE="$APP_DIR/.env"
+COMPOSE_FILE="${COMPOSE_FILE:-$INFRA_DIR/compose.yaml}"
 
 case "$SERVICE" in
   api|frontend) ;;
   *) echo "Unsupported service: $SERVICE" >&2; exit 2 ;;
 esac
 
-if [ ! -f "$ENV_FILE" ]; then
-  echo "$ENV_FILE is missing. Create it from infra/.env.example before deploying." >&2
-  exit 1
-fi
-
 if [ ! -f "$COMPOSE_FILE" ]; then
-  echo "$COMPOSE_FILE is missing. Sync the infra repo to the server first." >&2
-  exit 1
+  COMPOSE_FILE="$INFRA_DIR/docker-compose.prod.yml"
+  if [ ! -f "$COMPOSE_FILE" ]; then
+    echo "$COMPOSE_FILE is missing. Sync the infra repo to the server first." >&2
+    exit 1
+  fi
 fi
 
 LOCK_DIR="$APP_DIR/.deploy.lock"
@@ -64,6 +63,41 @@ set_env_var() {
   mv "$tmp" "$ENV_FILE"
 }
 
+ensure_env_file() {
+  mkdir -p "$INFRA_DIR" "$APP_DIR/data/postgres" "$APP_DIR/data/media" "$APP_DIR/data/caddy/data" "$APP_DIR/data/caddy/config"
+
+  if [ ! -f "$ENV_FILE" ]; then
+    if [ -f "$LEGACY_ENV_FILE" ] && [ ! -L "$LEGACY_ENV_FILE" ]; then
+      mv "$LEGACY_ENV_FILE" "$ENV_FILE"
+    elif [ -f "$INFRA_DIR/.env.example" ]; then
+      cp "$INFRA_DIR/.env.example" "$ENV_FILE"
+    else
+      echo "$ENV_FILE is missing and $INFRA_DIR/.env.example is unavailable." >&2
+      exit 1
+    fi
+    chmod 600 "$ENV_FILE"
+  fi
+
+  ln -sfn "$ENV_FILE" "$LEGACY_ENV_FILE"
+
+  set_env_var APP_ENV_FILE "$ENV_FILE"
+
+  if ! grep -q '^APP_DATA_DIR=' "$ENV_FILE"; then
+    set_env_var APP_DATA_DIR "$APP_DIR/data"
+  fi
+
+  if ! grep -q '^SECRET_KEY=' "$ENV_FILE" || grep -q '^SECRET_KEY=replace-me' "$ENV_FILE"; then
+    set_env_var SECRET_KEY "$(openssl rand -base64 48 | tr -d '\n')"
+  fi
+
+  if ! grep -q '^POSTGRES_PASSWORD=' "$ENV_FILE" || grep -q '^POSTGRES_PASSWORD=replace-me' "$ENV_FILE"; then
+    local generated_password
+    generated_password="$(openssl rand -hex 24)"
+    set_env_var POSTGRES_PASSWORD "$generated_password"
+    set_env_var DATABASE_URL "postgres://${POSTGRES_USER:-assembly}:$generated_password@db:5432/${POSTGRES_DB:-assembly}"
+  fi
+}
+
 wait_for_db() {
   for _ in $(seq 1 30); do
     if "${COMPOSE[@]}" exec -T db pg_isready -U "${POSTGRES_USER:-assembly}" -d "${POSTGRES_DB:-assembly}" >/dev/null 2>&1; then
@@ -96,8 +130,10 @@ wait_for_service() {
 }
 
 if [ "$SERVICE" = "api" ]; then
+  ensure_env_file
   set_env_var BACKEND_IMAGE "$IMAGE"
 else
+  ensure_env_file
   set_env_var FRONTEND_IMAGE "$IMAGE"
 fi
 

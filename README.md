@@ -19,26 +19,36 @@ The production VPS secrets stay in this infra repo.
 ## Server layout
 
 - `/opt/assembly/infra` - this repository copied by GitHub Actions.
-- `/opt/assembly/.env` - production configuration and secrets.
-- Docker named volumes store Postgres, Caddy certificates, and media files.
+- `/opt/assembly/infra/.env` - production configuration and secrets.
+- `/opt/assembly/.env` - compatibility symlink to `/opt/assembly/infra/.env`.
+- `/opt/assembly/data` - Postgres data, media files, and Caddy certificates/config.
 
 ## First server setup
 
 ```bash
 sudo APP_DIR=/opt/assembly SSH_USER=ubuntu bash scripts/bootstrap-server.sh
-cp .env.example /opt/assembly/.env
-chmod 600 /opt/assembly/.env
+bash scripts/deploy-service.sh api "$(cat deploy/backend/image.txt)"
+bash scripts/deploy-service.sh frontend "$(cat deploy/frontend/image.txt)"
 ```
 
-Fill `/opt/assembly/.env` with the real domain, Django secret key, Postgres
-password, and email settings before running a deploy.
+The deploy script creates `/opt/assembly/infra/.env` from `.env.example` when
+it is missing, generates `SECRET_KEY` and `POSTGRES_PASSWORD`, and keeps
+`/opt/assembly/.env` as a compatibility symlink. Edit email settings manually
+if SMTP is required.
 
 ## Manual deploy from the server
 
 ```bash
+cd /opt/assembly/infra
 bash scripts/deploy-service.sh api "$(cat deploy/backend/image.txt)"
 bash scripts/deploy-service.sh frontend "$(cat deploy/frontend/image.txt)"
 ```
+
+Use `docker compose ps`, `docker compose logs`, and `docker compose up -d` from
+`/opt/assembly/infra`. Do not run `docker compose down -v` in production unless
+you are intentionally deleting persistent data. Current Compose bind-mounts
+state under `/opt/assembly/data`, so certificates and database files are not
+Docker named volumes.
 
 ## Required infra secrets
 

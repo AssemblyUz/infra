@@ -15,7 +15,7 @@ SWAP_SIZE="${SWAP_SIZE:-2G}"
 export DEBIAN_FRONTEND=noninteractive
 
 "${SUDO[@]}" apt-get update
-"${SUDO[@]}" apt-get install -y ca-certificates curl gnupg ufw
+"${SUDO[@]}" apt-get install -y ca-certificates curl gnupg openssl ufw
 
 if [ ! -f /etc/apt/sources.list.d/docker.list ]; then
   "${SUDO[@]}" install -m 0755 -d /etc/apt/keyrings
@@ -33,7 +33,12 @@ fi
 "${SUDO[@]}" apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 "${SUDO[@]}" usermod -aG docker "$SSH_USER"
 
-"${SUDO[@]}" mkdir -p "$APP_DIR/infra"
+"${SUDO[@]}" mkdir -p \
+  "$APP_DIR/infra" \
+  "$APP_DIR/data/postgres" \
+  "$APP_DIR/data/media" \
+  "$APP_DIR/data/caddy/data" \
+  "$APP_DIR/data/caddy/config"
 "${SUDO[@]}" chown -R "$SSH_USER:$SSH_USER" "$APP_DIR"
 
 if ! "${SUDO[@]}" swapon --show | grep -q "$SWAP_FILE"; then
