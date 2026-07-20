@@ -1,8 +1,10 @@
 {$APP_DOMAIN} {
 	encode zstd gzip
 
-	@backend path /api/* /healthz/ /i18n/* {$ADMIN_PATH:/admin/*} /static/*
-	reverse_proxy @backend api:8000
+	@backend path /api/* /healthz /healthz/ /i18n/* {$ADMIN_PREFIX:/admin} {$ADMIN_PREFIX:/admin}/ {$ADMIN_PREFIX:/admin}/* /static/*
+	handle @backend {
+		reverse_proxy api:8000
+	}
 
 	handle_path /media/* {
 		root * /srv/media

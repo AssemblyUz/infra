@@ -36,6 +36,10 @@ it is missing, generates `SECRET_KEY` and `POSTGRES_PASSWORD`, and keeps
 `/opt/assembly/.env` as a compatibility symlink. Edit email settings manually
 if SMTP is required.
 
+If you move Django admin from `/admin/`, update both `ADMIN_URL` for Django
+and `ADMIN_PREFIX` for Caddy. For example, `ADMIN_URL=panel-7fa2/` pairs with
+`ADMIN_PREFIX=/panel-7fa2`.
+
 ## Manual deploy from the server
 
 ```bash
