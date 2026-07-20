@@ -39,7 +39,14 @@ fi
   "$APP_DIR/data/media" \
   "$APP_DIR/data/caddy/data" \
   "$APP_DIR/data/caddy/config"
-"${SUDO[@]}" chown -R "$SSH_USER:$SSH_USER" "$APP_DIR"
+"${SUDO[@]}" chown -R "$SSH_USER:$SSH_USER" \
+  "$APP_DIR/infra" \
+  "$APP_DIR/data/media" \
+  "$APP_DIR/data/caddy"
+
+if [ -z "$("${SUDO[@]}" find "$APP_DIR/data/postgres" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+  "${SUDO[@]}" chown 70:70 "$APP_DIR/data/postgres"
+fi
 
 if ! "${SUDO[@]}" swapon --show | grep -q "$SWAP_FILE"; then
   if [ ! -f "$SWAP_FILE" ]; then

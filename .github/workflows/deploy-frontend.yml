@@ -61,7 +61,7 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
           tar -czf infra.tar.gz compose.yaml docker-compose.prod.yml Caddyfile.template scripts README.md .env.example deploy
-          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "sudo mkdir -p /opt/assembly/infra && sudo chown -R '$VPS_USER:$VPS_USER' /opt/assembly"
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "sudo mkdir -p /opt/assembly/infra /opt/assembly/data/media /opt/assembly/data/caddy/data /opt/assembly/data/caddy/config && sudo chown -R '$VPS_USER:$VPS_USER' /opt/assembly/infra /opt/assembly/data/media /opt/assembly/data/caddy"
           scp -P "$VPS_PORT" infra.tar.gz "$VPS_USER@$VPS_HOST:/tmp/assembly-infra.tar.gz"
           ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "tar -xzf /tmp/assembly-infra.tar.gz -C /opt/assembly/infra && chmod +x /opt/assembly/infra/scripts/*.sh"
 
