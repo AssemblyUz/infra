@@ -1,1 +1,1 @@
-ghcr.io/assemblyuz/frontend:84dce8a493246c0aab21338443406b3a804cce51
+ghcr.io/assemblyuz/frontend:d51278c73444b35f69a811ebe0e71f92faff403e
