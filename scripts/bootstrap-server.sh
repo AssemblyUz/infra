@@ -41,8 +41,14 @@ fi
   "$APP_DIR/data/caddy/config"
 "${SUDO[@]}" chown -R "$SSH_USER:$SSH_USER" \
   "$APP_DIR/infra" \
-  "$APP_DIR/data/media" \
   "$APP_DIR/data/caddy"
+
+# Media is a bind mount into a container that runs as uid 1000, so it belongs
+# to that uid and not to whoever bootstrapped the server. Owned by anyone else
+# -- root, on a server administered as root -- the site stays perfectly healthy
+# while every photo upload fails on a permission error. Same reasoning as the
+# postgres chown below.
+"${SUDO[@]}" chown -R 1000:1000 "$APP_DIR/data/media"
 
 if [ -z "$("${SUDO[@]}" find "$APP_DIR/data/postgres" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
   "${SUDO[@]}" chown 70:70 "$APP_DIR/data/postgres"

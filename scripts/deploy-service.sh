@@ -98,6 +98,24 @@ ensure_env_file() {
   fi
 }
 
+ensure_media_ownership() {
+  # The media directory is a host bind mount, created above by whoever runs the
+  # deploy, while the api container runs as uid 1000. When those two disagree
+  # the site stays entirely healthy except that every photo upload fails on a
+  # permission error -- invisible until an editor tries to add a photo.
+  #
+  # Done through a throwaway root container rather than a plain chown: a deploy
+  # user that does not own the directory cannot chown it, and this script is not
+  # guaranteed to run as root. The Docker daemon is root and can.
+  local image="$1"
+  if ! "${DOCKER[@]}" run --rm --user 0:0 \
+    --volume "$APP_DIR/data/media:/mnt/media" \
+    "$image" sh -c 'chown -R 1000:1000 /mnt/media' >/dev/null 2>&1; then
+    echo "Warning: could not take ownership of $APP_DIR/data/media." >&2
+    echo "Photo uploads will fail until uid 1000 can write there." >&2
+  fi
+}
+
 wait_for_db() {
   for _ in $(seq 1 30); do
     if "${COMPOSE[@]}" exec -T db pg_isready -U "${POSTGRES_USER:-assembly}" -d "${POSTGRES_DB:-assembly}" >/dev/null 2>&1; then
@@ -146,6 +164,7 @@ set +a
 wait_for_db
 
 if [ "$SERVICE" = "api" ]; then
+  ensure_media_ownership "$IMAGE"
   "${COMPOSE[@]}" run --rm api python manage.py migrate --noinput
 fi
 
