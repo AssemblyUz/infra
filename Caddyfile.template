@@ -15,3 +15,27 @@
 		reverse_proxy frontend:3000
 	}
 }
+
+# Cloudflare proxies `www` to this server exactly as it does the apex, but only
+# the apex had a site block here -- so when Cloudflare opened a TLS connection
+# with SNI `www.assembly.uz`, Caddy had no certificate to present and the
+# handshake failed. Every path on the www name answered with Cloudflare's 525
+# page instead of the site, in every browser. It read as a Safari bug because
+# Safari hides the `www.` prefix in its address bar, which made the URL look
+# identical to the apex that works.
+#
+# A redirect rather than a second copy of the site. ALLOWED_HOSTS,
+# CORS_ALLOWED_ORIGINS and CSRF_TRUSTED_ORIGINS all name the apex alone, so a
+# panel served on www would fail every write with a CSRF error while the public
+# pages looked perfectly fine.
+#
+# The certificate arrives the same way the apex's did, which is the reason this
+# needs no `tls` block of its own. Let's Encrypt reaches the name through
+# Cloudflare, which terminates TLS, so the TLS-ALPN challenge cannot succeed and
+# Caddy falls back to HTTP-01 -- passed through because Cloudflare exempts
+# /.well-known/acme-challenge/ from Always Use HTTPS. Issuance runs in the
+# background after start, so if it ever fails it is this name that stays broken
+# and the apex is untouched.
+www.{$APP_DOMAIN} {
+	redir https://{$APP_DOMAIN}{uri} permanent
+}
